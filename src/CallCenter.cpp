@@ -44,6 +44,48 @@ void CallCenter::run()
 
 bool CallCenter::exportCDR()
 {
-    std::time_t date = time(0);
-    //Выгружать CDR с названием файла текущая_дата.txt
+    if(m_CDRvec.empty())
+        return false;
+
+    std::time_t journalDate = time(0);
+    json cdrJson = json::array();
+
+    for(auto iter {m_CDRvec.begin()}; iter != m_CDRvec.end(); iter++)
+    {
+        cdrJson.emplace_back(
+            json::array({
+            {"CallReceiveDT" ,  dateToString((*iter).m_callReceiveDT)},
+            {"CallAnswerDT" ,   dateToString((*iter).m_callAnswerDT)},
+            {"CallCloseDT" ,    dateToString((*iter).m_callCloseDT)},
+            {"CallID" ,         (*iter).m_callID},
+            {"CallStatus" ,     (*iter).m_callStatus},
+            {"CallerNumber" ,   (*iter).m_callerNumber},
+            {"OperatorID" ,     (*iter).m_operatorID}
+            }));
+    }
+
+    std::ofstream outputFile("../cdr/" + dateToString(journalDate));
+    if(!outputFile)
+        return false;
+
+    outputFile << std::setw(4) << cdrJson;
+    return true;
+}
+
+std::string dateToString(const time_t &src)
+{
+    tm *ltm = localtime(&src);
+    std::stringstream dateString;
+    dateString << ltm->tm_mday
+         << '/'
+         << 1 + ltm->tm_mon
+         << '/'
+         << 1900 + ltm->tm_year
+         << ' '
+         << 1 + ltm->tm_hour
+         << ':'
+         << 1 + ltm->tm_min
+         << ':'
+         << 1 + ltm->tm_sec;
+    return dateString.str();
 }
