@@ -3,7 +3,6 @@
 CallCenter::CallCenter()
     :m_config()
 {
-    Operator::m_freeOperatorsCount = m_config.getOperatorsCount();
 }
 
 bool CallCenter::readConfig(const std::string &fileName)
@@ -17,9 +16,65 @@ bool CallCenter::readConfig(const std::string &fileName)
     }
 }
 
-bool CallCenter::readRequest(const std::string &request)
+unsigned CallCenter::readRequest(const std::string &request)
 {
+    std::string tempStr = request;
+    if(request.find("CALL"))
+    {
+        tempStr.replace(request.find("CALL"), 4, "");
+        tempStr.erase(std::remove_if
+            (tempStr.begin(), tempStr.end(), isspace), tempStr.end());
+        if(tempStr.length() == 11)
+        {
+            return atoi(tempStr.c_str());
+        }
+        else
+        {
+            //Не удалось обработать номер
+            return 0;
+        }
+    }
+}
 
+std::time_t proceedCall(const unsigned processingTime)
+{
+    std::chrono::milliseconds timespan(processingTime);
+    std::this_thread::sleep_for(timespan);
+    return std::time(0);
+}
+
+CDR proceedRequest(const std::time_t &callReceiveDT,
+                    const std::string &callID,
+                    unsigned operatorID,
+                    unsigned processingTime,
+                    unsigned rMin,
+                    unsigned rMax)
+{
+    //TODO: нужно переписать логику
+    //run() будет каждый интервал проверять массив заявок, смотреть у кого истекло ожидание
+    //Создать структуру заявка
+    //И наверное уже ассинхронно вызывать proceedCall(), если заявка выбрана для обработки
+}
+
+
+std::string CallCenter::getRandomString()
+{
+    const int max_len = 10;
+    std::string valid_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::string rand_str;
+    do
+    {
+        std::shuffle(valid_chars.begin(), valid_chars.end(), g);
+        rand_str = std::string(valid_chars.begin(), valid_chars.begin() + max_len);
+    } while(std::find(
+        m_CDRvec.begin(),
+        m_CDRvec.end(),
+        rand_str)
+        != m_CDRvec.end());
+
+    return rand_str;
 }
 
 void CallCenter::run()
@@ -31,12 +86,41 @@ void CallCenter::run()
 
     while (query != "exit")
     {
-        if(readRequest(query))
+        std::time_t callReceiveDT = time(0);
+        std::string callID = getRandomString();
+        unsigned callerNum = readRequest(query);
+        std::time_t callCloseDT;
+        bool haveFreeOp = false;
+
+        if(callerNum != 0)
         {
             
+            for(auto opIter = m_Operators.begin();
+                opIter != m_Operators.end(); opIter++)
+            {
+                if(!(*opIter).m_isBusy)
+                {
+                    haveFreeOp = true;
+                    // auto runner = 
+                    //     std::async(
+                    //         std::launch::async,
+                    //         proceedRequest,
+                    //         callReceiveDT,
+                    //         callID,
+                    //         (*opIter).m_ID,
+                    //         m_config.getProcessingTime(),
+                    //         m_config.getRmin,
+                    //         m_config.getRmax);
+                }
+            }
+            if(!haveFreeOp)
+            {
+                m_callsQueue.push(callerNum);
+            }
+            //Формировать CDR
         }else
         {
-
+            //Неверно задан номер
         }
     }
     
