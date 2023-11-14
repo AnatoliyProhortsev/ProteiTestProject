@@ -8,7 +8,8 @@ class Config
 {
 public:
                 Config();
-    bool        readConfigFile(std::string fileName);
+                Config(const std::string &fileName);
+    bool        readConfigFile(const std::string &fileName);
     bool        getCallDuplicationMode();
     unsigned    getOperatorsCount();
     unsigned    getQueueSize();

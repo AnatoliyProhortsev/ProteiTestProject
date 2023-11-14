@@ -1,10 +1,10 @@
 #include <iostream>
 
-#include "../inc/Config.hpp"
+#include "../inc/CallCenter.hpp"
 
 int main(int argc, char* argv[])
 {
-    Config cfg;
-    cfg.readConfigFile("../cfg/cfg.json");
+    CallCenter center("../cfg/cfg.json");
+    center.run();
     return 0;
 }

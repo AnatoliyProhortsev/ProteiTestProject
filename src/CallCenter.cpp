@@ -1,88 +1,124 @@
 #include "../inc/CallCenter.hpp"
 
-CallCenter::CallCenter()
-    :m_config()
+CallCenter::CallCenter(const std::string &cfgName)
+    :m_config(cfgName)
 {
+    for(unsigned i = 0; i < m_config.getOperatorsCount(); i++)
+        m_Operators.push_back(Operator{i, false});
+}
+
+CallCenter::~CallCenter()
+{
+    m_CDRvec.clear();
+    m_callsVec.clear();
+    m_Operators.clear();
 }
 
 bool CallCenter::readConfig(const std::string &fileName)
 {
     if(m_config.readConfigFile(fileName))
     {
-        //success
-    }else
-    {
-        //no config
+        return true;
     }
+    return false;
 }
 
 unsigned CallCenter::readRequest(const std::string &request)
 {
     std::string tempStr = request;
+
     if(request.find("CALL"))
     {
         tempStr.replace(request.find("CALL"), 4, "");
         tempStr.erase(std::remove_if
-            (tempStr.begin(), tempStr.end(), isspace), tempStr.end());
+                        (tempStr.begin(),
+                        tempStr.end(),
+                        isspace),
+                        tempStr.end());
+
         if(tempStr.length() == 11)
-        {
             return atoi(tempStr.c_str());
-        }
-        else
-        {
-            //Не удалось обработать номер
-            return 0;
-        }
     }
+
+    return 0;
 }
 
-std::time_t proceedCall(const unsigned processingTime)
+bool CallCenter::proceedCall_background
+                    (Call call,
+                    unsigned operatorID)
 {
-    std::chrono::milliseconds timespan(processingTime);
+    std::time_t answerTime = time(0);
+    std::chrono::milliseconds timespan(m_config.getProcessingTime());
     std::this_thread::sleep_for(timespan);
-    return std::time(0);
+    m_CDRvec.push_back(
+                    CDR{
+                        call.m_receiveTime,
+                        answerTime,
+                        time(0),
+                        call.m_callID,
+                        "OK",
+                        call.m_Number,
+                        operatorID
+                    });
+
+    return true;
 }
 
-CDR proceedRequest(const std::time_t &callReceiveDT,
-                    const std::string &callID,
-                    unsigned operatorID,
-                    unsigned processingTime,
-                    unsigned rMin,
-                    unsigned rMax)
+bool CallCenter::distributeRequests_background()
 {
-    //TODO: нужно переписать логику
-    //run() будет каждый интервал проверять массив заявок, смотреть у кого истекло ожидание
-    //Создать структуру заявка
-    //И наверное уже ассинхронно вызывать proceedCall(), если заявка выбрана для обработки
-}
+    std::time_t curTime;
+    std::queue<std::future<bool>> activeCalls;
 
-
-std::string CallCenter::getRandomString()
-{
-    const int max_len = 10;
-    std::string valid_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    std::random_device rd;
-    std::mt19937 g(rd());
-    std::string rand_str;
-    do
+    while (m_isWorking)
     {
-        std::shuffle(valid_chars.begin(), valid_chars.end(), g);
-        rand_str = std::string(valid_chars.begin(), valid_chars.begin() + max_len);
-    } while(std::find(
-        m_CDRvec.begin(),
-        m_CDRvec.end(),
-        rand_str)
-        != m_CDRvec.end());
-
-    return rand_str;
+        while (!m_callsVec.empty())
+        {
+            for(auto opIter = m_Operators.begin();
+                    opIter != m_Operators.end();
+                    opIter++)
+            {
+                m_mutex.lock();
+                if(!(*opIter).m_isBusy)
+                {
+                    (*opIter).m_isBusy = true;
+                    activeCalls.push(
+                        std::async(
+                            std::launch::async,
+                            &CallCenter::proceedCall_background,
+                            this,
+                            m_callsVec.front(),
+                            (*opIter).m_ID));
+                    
+                    m_callsVec.erase(m_callsVec.begin());
+                }
+                m_mutex.unlock();
+            }
+            m_mutex.lock();
+            for(auto callsIter = m_callsVec.begin();
+                    callsIter != m_callsVec.end();
+                    callsIter++)
+            {
+                (*callsIter).m_awaitingTime+=500;
+            }
+            m_mutex.unlock();
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+    return true;
 }
 
 void CallCenter::run()
 {
     std::string query;
-
     std::cout<<"Enter a http request: ";
     std::cin>>query;
+
+    m_isWorking = true;
+
+    std::async(
+            std::launch::async,
+            &CallCenter::distributeRequests_background,
+            this);
 
     while (query != "exit")
     {
@@ -90,40 +126,31 @@ void CallCenter::run()
         std::string callID = getRandomString();
         unsigned callerNum = readRequest(query);
         std::time_t callCloseDT;
-        bool haveFreeOp = false;
 
         if(callerNum != 0)
         {
-            
-            for(auto opIter = m_Operators.begin();
-                opIter != m_Operators.end(); opIter++)
-            {
-                if(!(*opIter).m_isBusy)
-                {
-                    haveFreeOp = true;
-                    // auto runner = 
-                    //     std::async(
-                    //         std::launch::async,
-                    //         proceedRequest,
-                    //         callReceiveDT,
-                    //         callID,
-                    //         (*opIter).m_ID,
-                    //         m_config.getProcessingTime(),
-                    //         m_config.getRmin,
-                    //         m_config.getRmax);
-                }
-            }
-            if(!haveFreeOp)
-            {
-                m_callsQueue.push(callerNum);
-            }
-            //Формировать CDR
+            m_mutex.lock();
+
+            if(m_callsVec.size() == m_config.getQueueSize())
+                std::cout<<"Overload.\n";
+            else
+                m_callsVec.push_back(Call{
+                                callerNum,
+                                0,
+                                callReceiveDT,
+                                callID});
+
+            m_mutex.unlock();
         }else
         {
+            std::cout<<"Bad Request.\n";
             //Неверно задан номер
         }
+
+        std::cout<<"Enter a http request: ";
+        std::cin>>query;
     }
-    
+    m_isWorking = false;
 }
 
 bool CallCenter::exportCDR()
@@ -134,7 +161,7 @@ bool CallCenter::exportCDR()
     std::time_t journalDate = time(0);
     json cdrJson = json::array();
 
-    for(auto iter {m_CDRvec.begin()}; iter != m_CDRvec.end(); iter++)
+    for(auto iter = m_CDRvec.begin(); iter != m_CDRvec.end(); iter++)
     {
         cdrJson.emplace_back(
             json::array({
@@ -156,7 +183,7 @@ bool CallCenter::exportCDR()
     return true;
 }
 
-std::string dateToString(const time_t &src)
+std::string CallCenter::dateToString(const time_t &src)
 {
     tm *ltm = localtime(&src);
     std::stringstream dateString;
@@ -172,4 +199,37 @@ std::string dateToString(const time_t &src)
          << ':'
          << 1 + ltm->tm_sec;
     return dateString.str();
+}
+
+std::string CallCenter::getRandomString()
+{
+    const int max_len = 10;
+    std::string valid_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::string rand_str;
+    do
+    {
+        std::shuffle(valid_chars.begin(), valid_chars.end(), g);
+        rand_str = std::string(valid_chars.begin(), valid_chars.begin() + max_len);
+    } while(!isUniqueID(rand_str));
+
+    return rand_str;
+}
+
+bool CallCenter::isUniqueID(const std::string &ID)
+{
+    if(m_CDRvec.empty())
+        return true;
+
+    m_mutex.lock();
+    for(auto idIter = m_CDRvec.begin();
+            idIter != m_CDRvec.end();
+            idIter++)
+    {
+        if((*idIter).m_callID == ID)
+            return false;
+    }
+    m_mutex.unlock();
+    return true;
 }

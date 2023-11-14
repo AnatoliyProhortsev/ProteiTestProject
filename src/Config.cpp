@@ -5,6 +5,17 @@ Config::Config()
     performDefaultCfg();
 }
 
+Config::Config(const std::string &fileName)
+{
+    if(!readConfigFile(fileName))
+    {
+        //Ошибка чтения cfg
+    }else
+    {
+        //Вывести значения
+    }
+}
+
 void Config::performDefaultCfg()
 {
     m_callDuplicationMode = false;
@@ -15,13 +26,13 @@ void Config::performDefaultCfg()
     m_Rmin = 5000;
 }
 
-bool Config::readConfigFile(std::string fileName)
+bool Config::readConfigFile(const std::string &fileName)
 {
     std::fstream configFile(fileName);
 
     if(!configFile)
     {
-        //error for reading cfg
+        performDefaultCfg();
         return false;
     }
     else
