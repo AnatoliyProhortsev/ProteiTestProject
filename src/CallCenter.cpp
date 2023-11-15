@@ -35,9 +35,10 @@ unsigned CallCenter::readRequest(const std::string &request)
                         tempStr.end(),
                         isspace),
                         tempStr.end());
-
         if(tempStr.length() == 11)
             return atoi(tempStr.c_str());
+        else
+            return 0;   
     }
 
     return 0;
@@ -77,9 +78,9 @@ bool CallCenter::distributeRequests_background()
                     opIter != m_Operators.end();
                     opIter++)
             {
-                m_mutex.lock();
                 if(!(*opIter).m_isBusy)
                 {
+                    m_mutex.lock();
                     (*opIter).m_isBusy = true;
                     activeCalls.push(
                         std::async(
@@ -90,8 +91,8 @@ bool CallCenter::distributeRequests_background()
                             (*opIter).m_ID));
                     
                     m_callsVec.erase(m_callsVec.begin());
+                    m_mutex.unlock();
                 }
-                m_mutex.unlock();
             }
             m_mutex.lock();
             for(auto callsIter = m_callsVec.begin();
@@ -115,10 +116,10 @@ void CallCenter::run()
 
     m_isWorking = true;
 
-    std::async(
-            std::launch::async,
-            &CallCenter::distributeRequests_background,
-            this);
+    auto distributorHandle = std::async(
+                                std::launch::async,
+                                &CallCenter::distributeRequests_background,
+                                this);
 
     while (query != "exit")
     {
@@ -139,6 +140,7 @@ void CallCenter::run()
                                 0,
                                 callReceiveDT,
                                 callID});
+                std::cout<<"pushed\n";
 
             m_mutex.unlock();
         }else
