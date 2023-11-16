@@ -5,6 +5,8 @@ CallCenter::CallCenter(const std::string &cfgName)
 {
     for(unsigned i = 0; i < m_config.getOperatorsCount(); i++)
         m_Operators.push_back(Operator{i, false});
+
+    srand(time(0));
 }
 
 CallCenter::~CallCenter()
@@ -44,41 +46,57 @@ unsigned CallCenter::readRequest(const std::string &request)
     return 0;
 }
 
-void CallCenter::proceedCall_background
-                    (Call call,
-                    unsigned opID)
+void CallCenter::proceedCall_background(Call call, unsigned opID)
 {
+    m_configMutex.lock();
+    unsigned rMin       = m_config.getRmin();
+    unsigned rMax       = m_config.getRmax();
+    unsigned procTime   = m_config.getProcessingTime();
+    m_configMutex.unlock();
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(
+        rand() %
+        (rMax - rMin + 1)
+        + rMin
+    ));
+
     std::time_t answerTime = time(0);
-    std::chrono::milliseconds timespan(m_config.getProcessingTime());
+    std::chrono::milliseconds timespan(procTime);
     std::this_thread::sleep_for(timespan);
-    m_CDRvec.push_back(
-                    CDR{
-                        call.m_receiveTime,
+
+    m_CDRMutex.lock();
+    addCDREntry(
+        call.m_receiveTime,
                         answerTime,
                         time(0),
                         call.m_callID,
                         "OK",
                         call.m_Number,
-                        opID
-                    });
+                        opID);      
+    m_CDRMutex.unlock();
 
-    m_mutex.lock();
+    m_operatorsMutex.lock();
     m_Operators.at(opID).m_isBusy = false;
-    m_mutex.unlock();
+    m_operatorsMutex.unlock();
 }
 
 void CallCenter::distributeRequests_background()
 {
+    unsigned rMax = m_config.getRmax();
+    unsigned rMin = m_config.getRmin();
+
     while (m_isWorking)
     {
         while (!m_callsVec.empty())
         {
+            m_operatorsMutex.lock();
             for(auto opIter = m_Operators.begin();
                     opIter != m_Operators.end();
                     opIter++)
             {
                 if(!(*opIter).m_isBusy)
                 {
+                    m_callsMutex.lock();
                     (*opIter).m_isBusy = true;
 
                     std::thread activeCall(
@@ -88,24 +106,40 @@ void CallCenter::distributeRequests_background()
                         (*opIter).m_ID
                     );
                     activeCall.detach();
-
-                    m_mutex.lock();
                     m_callsVec.erase(m_callsVec.begin());
-                    m_mutex.unlock();
+
+                    m_callsMutex.unlock();
                     break;
                 }
             }
-            m_mutex.lock();
+            m_operatorsMutex.unlock();
+
+            m_callsMutex.lock();
+            auto callsIter = m_callsVec.begin();
             if(!m_callsVec.empty())
-                for(auto callsIter = m_callsVec.begin();
-                        callsIter != m_callsVec.end();
-                        callsIter++)
-                {
-                    (*callsIter).m_awaitingTime+=500;
-                }
-            m_mutex.unlock();
+                while(callsIter!= m_callsVec.end())
+                    if((*callsIter).m_awaitingTime >= rMax - rMin)
+                    {
+                        //timeout
+                        addCDREntry(
+                            (*callsIter).m_receiveTime,
+                            0,
+                            time(0),
+                            (*callsIter).m_callID,
+                            "timeout",
+                            (*callsIter).m_Number,
+                            0);
+                        callsIter = m_callsVec.erase(callsIter);
+                        
+                    }else
+                    {
+                        (*callsIter).m_awaitingTime+=250;
+                        callsIter++;
+                    }
+                        
+            m_callsMutex.unlock();
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
 
     std::this_thread::sleep_for(
@@ -115,6 +149,10 @@ void CallCenter::distributeRequests_background()
 void CallCenter::run()
 {
     //TODO: Нормальное чтение запросов
+    //TODO: Убирать поля у записей несостоявшихся звонков
+    //TODO: Добавить длительность звонков в CDR
+    unsigned queueSize = m_config.getQueueSize();
+
     std::string query;
     std::cout<<"Enter a http request: ";
     std::cin>>query;
@@ -132,8 +170,8 @@ void CallCenter::run()
 
         if(callerNum != 0)
         {
-            m_mutex.lock();
-            if(m_callsVec.size() == m_config.getQueueSize())
+            m_callsMutex.lock();
+            if(m_callsVec.size() == queueSize)
                 std::cout<<"Overload.\n";
             else
                 m_callsVec.push_back(Call{
@@ -142,7 +180,7 @@ void CallCenter::run()
                                 callReceiveDT,
                                 callID});
 
-            m_mutex.unlock();
+            m_callsMutex.unlock();
         }else
         {
             std::cout<<"Bad Request.\n";
@@ -162,19 +200,18 @@ bool CallCenter::exportCDR()
         return false;
 
     json cdrJson = json::array();
-
+    
     for(auto iter = m_CDRvec.begin(); iter != m_CDRvec.end(); iter++)
     {
-        cdrJson.emplace_back(
-            json::array({
-            {"CallReceiveDT" ,  dateToString((*iter).m_callReceiveDT)},
-            {"CallAnswerDT" ,   dateToString((*iter).m_callAnswerDT)},
-            {"CallCloseDT" ,    dateToString((*iter).m_callCloseDT)},
-            {"CallID" ,         (*iter).m_callID},
-            {"CallStatus" ,     (*iter).m_callStatus},
-            {"CallerNumber" ,   (*iter).m_callerNumber},
-            {"OperatorID" ,     (*iter).m_operatorID}
-            }));
+        json cdrEntry;
+        cdrEntry["CallReceiveDT"] = dateToString((*iter).m_callReceiveDT);
+        cdrEntry["CallAnswerDT"] = dateToString((*iter).m_callAnswerDT);
+        cdrEntry["CallCloseDT"] = dateToString((*iter).m_callCloseDT);
+        cdrEntry["CallID"] = (*iter).m_callID;
+        cdrEntry["CallStatus"] = (*iter).m_callStatus;
+        cdrEntry["CallerNumber"] = (*iter).m_callerNumber;
+        cdrEntry["OperatorID"] = (*iter).m_operatorID;
+        cdrJson.emplace_back(std::move(cdrEntry));
     }
 
     std::time_t journalDate = time(0);
@@ -201,11 +238,11 @@ std::string CallCenter::dateToString(const time_t &src)
          << '/'
          << 1900 + ltm->tm_year
          << ' '
-         << 1 + ltm->tm_hour
+         << ltm->tm_hour
          << ':'
-         << 1 + ltm->tm_min
+         << ltm->tm_min
          << ':'
-         << 1 + ltm->tm_sec;
+         << ltm->tm_sec;
     return dateString.str();
 }
 
@@ -219,11 +256,11 @@ std::string CallCenter::dateToFileNameString(const time_t &src)
          << '_'
          << 1900 + ltm->tm_year
          << '_'
-         << 1 + ltm->tm_hour
+         << ltm->tm_hour
          << '_'
-         << 1 + ltm->tm_min
+         << ltm->tm_min
          << '_'
-         << 1 + ltm->tm_sec;
+         << ltm->tm_sec;
     return dateString.str();
 }
 
@@ -248,7 +285,7 @@ bool CallCenter::isUniqueID(const std::string &ID)
     if(m_CDRvec.empty())
         return true;
 
-    m_mutex.lock();
+    m_CDRMutex.lock();
     for(auto idIter = m_CDRvec.begin();
             idIter != m_CDRvec.end();
             idIter++)
@@ -256,6 +293,27 @@ bool CallCenter::isUniqueID(const std::string &ID)
         if((*idIter).m_callID == ID)
             return false;
     }
-    m_mutex.unlock();
+    m_CDRMutex.unlock();
     return true;
+}
+
+void CallCenter::addCDREntry(
+                    const std::time_t &receiveTime,
+                    const std::time_t &answerTime,
+                    const std::time_t &closeTime,
+                    const std::string &callID,
+                    const std::string &status,
+                    unsigned           number,
+                    unsigned           opID)
+{
+    m_CDRvec.push_back(
+                    CDR{
+                        receiveTime,
+                        answerTime,
+                        closeTime,
+                        callID,
+                        status,
+                        number,
+                        opID
+                    });
 }

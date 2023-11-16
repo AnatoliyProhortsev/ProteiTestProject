@@ -70,11 +70,23 @@ private:
 
     void        distributeRequests_background();
 
+    void        addCDREntry(
+                    const std::time_t &receiveTime,
+                    const std::time_t &answerTime,
+                    const std::time_t &closeTime,
+                    const std::string &callID,
+                    const std::string &status,
+                    unsigned           number,
+                    unsigned           opID);
+
     bool        isUniqueID(const std::string &ID);
 
     unsigned    readRequest(const std::string &request);
 
-    std::mutex                  m_mutex;
+    std::mutex                  m_operatorsMutex;
+    std::mutex                  m_callsMutex;
+    std::mutex                  m_CDRMutex;
+    std::mutex                  m_configMutex;
     Config                      m_config;
     std::vector<CDR>            m_CDRvec;
     std::vector<Operator>       m_Operators;
