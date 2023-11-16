@@ -44,9 +44,9 @@ unsigned CallCenter::readRequest(const std::string &request)
     return 0;
 }
 
-bool CallCenter::proceedCall_background
+void CallCenter::proceedCall_background
                     (Call call,
-                    unsigned operatorID)
+                    unsigned opID)
 {
     std::time_t answerTime = time(0);
     std::chrono::milliseconds timespan(m_config.getProcessingTime());
@@ -59,17 +59,16 @@ bool CallCenter::proceedCall_background
                         call.m_callID,
                         "OK",
                         call.m_Number,
-                        operatorID
+                        opID
                     });
 
-    return true;
+    m_mutex.lock();
+    m_Operators.at(opID).m_isBusy = false;
+    m_mutex.unlock();
 }
 
-bool CallCenter::distributeRequests_background()
+void CallCenter::distributeRequests_background()
 {
-    std::time_t curTime;
-    std::queue<std::future<bool>> activeCalls;
-
     while (m_isWorking)
     {
         while (!m_callsVec.empty())
@@ -80,58 +79,60 @@ bool CallCenter::distributeRequests_background()
             {
                 if(!(*opIter).m_isBusy)
                 {
-                    m_mutex.lock();
                     (*opIter).m_isBusy = true;
-                    activeCalls.push(
-                        std::async(
-                            std::launch::async,
-                            &CallCenter::proceedCall_background,
-                            this,
-                            m_callsVec.front(),
-                            (*opIter).m_ID));
-                    
+
+                    std::thread activeCall(
+                        &CallCenter::proceedCall_background,
+                        this,
+                        std::move(m_callsVec.front()),
+                        (*opIter).m_ID
+                    );
+                    activeCall.detach();
+
+                    m_mutex.lock();
                     m_callsVec.erase(m_callsVec.begin());
                     m_mutex.unlock();
+                    break;
                 }
             }
             m_mutex.lock();
-            for(auto callsIter = m_callsVec.begin();
-                    callsIter != m_callsVec.end();
-                    callsIter++)
-            {
-                (*callsIter).m_awaitingTime+=500;
-            }
+            if(!m_callsVec.empty())
+                for(auto callsIter = m_callsVec.begin();
+                        callsIter != m_callsVec.end();
+                        callsIter++)
+                {
+                    (*callsIter).m_awaitingTime+=500;
+                }
             m_mutex.unlock();
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
-    return true;
+
+    std::this_thread::sleep_for(
+        std::chrono::milliseconds(m_config.getProcessingTime()));
 }
 
 void CallCenter::run()
 {
+    //TODO: Нормальное чтение запросов
     std::string query;
     std::cout<<"Enter a http request: ";
     std::cin>>query;
 
     m_isWorking = true;
 
-    auto distributorHandle = std::async(
-                                std::launch::async,
-                                &CallCenter::distributeRequests_background,
-                                this);
+    std::thread distributor(&CallCenter::distributeRequests_background, this);
 
     while (query != "exit")
     {
         std::time_t callReceiveDT = time(0);
         std::string callID = getRandomString();
-        unsigned callerNum = readRequest(query);
+        unsigned callerNum = atoi(query.c_str());
         std::time_t callCloseDT;
 
         if(callerNum != 0)
         {
             m_mutex.lock();
-
             if(m_callsVec.size() == m_config.getQueueSize())
                 std::cout<<"Overload.\n";
             else
@@ -140,7 +141,6 @@ void CallCenter::run()
                                 0,
                                 callReceiveDT,
                                 callID});
-                std::cout<<"pushed\n";
 
             m_mutex.unlock();
         }else
@@ -153,6 +153,7 @@ void CallCenter::run()
         std::cin>>query;
     }
     m_isWorking = false;
+    distributor.join();
 }
 
 bool CallCenter::exportCDR()
@@ -160,7 +161,6 @@ bool CallCenter::exportCDR()
     if(m_CDRvec.empty())
         return false;
 
-    std::time_t journalDate = time(0);
     json cdrJson = json::array();
 
     for(auto iter = m_CDRvec.begin(); iter != m_CDRvec.end(); iter++)
@@ -177,11 +177,17 @@ bool CallCenter::exportCDR()
             }));
     }
 
-    std::ofstream outputFile("../cdr/" + dateToString(journalDate));
+    std::time_t journalDate = time(0);
+
+    std::ofstream outputFile(
+        "../cdr/" + dateToFileNameString(journalDate),
+        std::ofstream::out);
+
     if(!outputFile)
         return false;
 
     outputFile << std::setw(4) << cdrJson;
+    outputFile.close();
     return true;
 }
 
@@ -199,6 +205,24 @@ std::string CallCenter::dateToString(const time_t &src)
          << ':'
          << 1 + ltm->tm_min
          << ':'
+         << 1 + ltm->tm_sec;
+    return dateString.str();
+}
+
+std::string CallCenter::dateToFileNameString(const time_t &src)
+{
+    tm *ltm = localtime(&src);
+    std::stringstream dateString;
+    dateString << ltm->tm_mday
+         << '_'
+         << 1 + ltm->tm_mon
+         << '_'
+         << 1900 + ltm->tm_year
+         << '_'
+         << 1 + ltm->tm_hour
+         << '_'
+         << 1 + ltm->tm_min
+         << '_'
          << 1 + ltm->tm_sec;
     return dateString.str();
 }

@@ -60,22 +60,24 @@ public:
 private:
 
     std::string dateToString(const time_t &src);
+    
+    std::string dateToFileNameString(const time_t &src);
 
     std::string getRandomString();
 
-    bool        proceedCall_background(Call call,
-                                        unsigned operatorID);
+    void        proceedCall_background(Call call,
+                                        unsigned opID);
 
-    bool        distributeRequests_background();
+    void        distributeRequests_background();
 
     bool        isUniqueID(const std::string &ID);
 
     unsigned    readRequest(const std::string &request);
 
-    std::mutex              m_mutex;
-    Config                  m_config;
-    std::vector<CDR>        m_CDRvec;
-    std::vector<Operator>   m_Operators;
-    std::vector<Call>       m_callsVec;
-    bool                    m_isWorking;
+    std::mutex                  m_mutex;
+    Config                      m_config;
+    std::vector<CDR>            m_CDRvec;
+    std::vector<Operator>       m_Operators;
+    std::vector<Call>           m_callsVec;
+    bool                        m_isWorking;
 };

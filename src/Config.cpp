@@ -44,13 +44,20 @@ bool Config::readConfigFile(const std::string &fileName)
         }
         else
         {
-            m_callDuplicationMode   = parameters["CallDuplicationMode"].template get<bool>();
-            m_operatorsCount        = parameters["OperatorsCount"].template get<unsigned>();
-            m_processingTime        = parameters["ProcessingTime"].template get<unsigned>();
-            m_queueSize             = parameters["QueueSize"].template get<unsigned>();
-            m_Rmax                  = parameters["Rmax"].template get<unsigned>();
-            m_Rmin                  = parameters["Rmin"].template get<unsigned>();
+            m_callDuplicationMode = 
+                parameters["CallDuplicationMode"].template get<bool>();
+            m_operatorsCount      = 
+                parameters["OperatorsCount"].template get<unsigned>();
+            m_processingTime      = 
+                parameters["ProcessingTime"].template get<unsigned>();
+            m_queueSize           = 
+                parameters["QueueSize"].template get<unsigned>();
+            m_Rmax                = 
+                parameters["Rmax"].template get<unsigned>();
+            m_Rmin                = 
+                parameters["Rmin"].template get<unsigned>();
         }
+        configFile.close();
         return true;
     }
 }
