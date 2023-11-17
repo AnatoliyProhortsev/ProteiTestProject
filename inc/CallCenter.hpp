@@ -28,6 +28,7 @@ struct CDR
     std::string  m_callStatus;
     unsigned     m_callerNumber;
     unsigned     m_operatorID;
+    bool         m_isCallProceeded;
 };
 
 struct Operator
@@ -77,7 +78,8 @@ private:
                     const std::string &callID,
                     const std::string &status,
                     unsigned           number,
-                    unsigned           opID);
+                    unsigned           opID,
+                    bool               proceeded);
 
     bool        isUniqueID(const std::string &ID);
 

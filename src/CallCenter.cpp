@@ -72,7 +72,8 @@ void CallCenter::proceedCall_background(Call call, unsigned opID)
                         call.m_callID,
                         "OK",
                         call.m_Number,
-                        opID);      
+                        opID,
+                        true);      
     m_CDRMutex.unlock();
 
     m_operatorsMutex.lock();
@@ -128,7 +129,8 @@ void CallCenter::distributeRequests_background()
                             (*callsIter).m_callID,
                             "timeout",
                             (*callsIter).m_Number,
-                            0);
+                            0,
+                            false);
                         callsIter = m_callsVec.erase(callsIter);
                         
                     }else
@@ -138,8 +140,8 @@ void CallCenter::distributeRequests_background()
                     }
                         
             m_callsMutex.unlock();
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
 
     std::this_thread::sleep_for(
@@ -204,13 +206,25 @@ bool CallCenter::exportCDR()
     for(auto iter = m_CDRvec.begin(); iter != m_CDRvec.end(); iter++)
     {
         json cdrEntry;
-        cdrEntry["CallReceiveDT"] = dateToString((*iter).m_callReceiveDT);
-        cdrEntry["CallAnswerDT"] = dateToString((*iter).m_callAnswerDT);
-        cdrEntry["CallCloseDT"] = dateToString((*iter).m_callCloseDT);
-        cdrEntry["CallID"] = (*iter).m_callID;
-        cdrEntry["CallStatus"] = (*iter).m_callStatus;
-        cdrEntry["CallerNumber"] = (*iter).m_callerNumber;
-        cdrEntry["OperatorID"] = (*iter).m_operatorID;
+        cdrEntry.clear();
+        if((*iter).m_isCallProceeded)
+        {
+            cdrEntry["CallReceiveDT"] = dateToString((*iter).m_callReceiveDT);
+            cdrEntry["CallAnswerDT"] = dateToString((*iter).m_callAnswerDT);
+            cdrEntry["CallCloseDT"] = dateToString((*iter).m_callCloseDT);
+            cdrEntry["CallID"] = (*iter).m_callID;
+            cdrEntry["CallStatus"] = (*iter).m_callStatus;
+            cdrEntry["CallerNumber"] = (*iter).m_callerNumber;
+            cdrEntry["OperatorID"] = (*iter).m_operatorID;
+        }
+        else
+        {
+            cdrEntry["CallReceiveDT"] = dateToString((*iter).m_callReceiveDT);
+            cdrEntry["CallCloseDT"] = dateToString((*iter).m_callCloseDT);
+            cdrEntry["CallID"] = (*iter).m_callID;
+            cdrEntry["CallStatus"] = (*iter).m_callStatus;
+            cdrEntry["CallerNumber"] = (*iter).m_callerNumber;
+        }
         cdrJson.emplace_back(std::move(cdrEntry));
     }
 
@@ -304,7 +318,8 @@ void CallCenter::addCDREntry(
                     const std::string &callID,
                     const std::string &status,
                     unsigned           number,
-                    unsigned           opID)
+                    unsigned           opID,
+                    bool               proceeded)
 {
     m_CDRvec.push_back(
                     CDR{
@@ -314,6 +329,7 @@ void CallCenter::addCDREntry(
                         callID,
                         status,
                         number,
-                        opID
+                        opID,
+                        proceeded
                     });
 }
