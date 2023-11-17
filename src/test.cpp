@@ -5,7 +5,7 @@
 int main(int argc, char* argv[])
 {
     CallCenter center("../cfg/cfg.json");
-    center.run();
+    center.start();
     std::cout<<center.exportCDR()<<'\n';
     return 0;
 }
