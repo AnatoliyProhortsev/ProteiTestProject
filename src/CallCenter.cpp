@@ -153,28 +153,46 @@ void CallCenter::run()
     //TODO: Нормальное чтение запросов
     //TODO: Убирать поля у записей несостоявшихся звонков
     //TODO: Добавить длительность звонков в CDR
-    unsigned queueSize = m_config.getQueueSize();
-
-    std::string query;
-    std::cout<<"Enter a http request: ";
-    std::cin>>query;
 
     m_isWorking = true;
-
     std::thread distributor(&CallCenter::distributeRequests_background, this);
-
-    while (query != "exit")
+    m_server.Post("/shutdown",
+                [this]
+                (const httplib::Request& req,
+                 httplib::Response& res)
     {
+        m_isWorking = false;
+        m_server.stop();
+    });
+
+    m_server.Post("/call", [this](const httplib::Request& req, httplib::Response& res)
+    {
+        unsigned callerNum;
+        std::string val;
+        if (req.has_param("number"))
+        {
+            val = req.get_param_value("number");
+            if(val.length() == 11)
+            {
+                for (char const& c : val) 
+                {
+                    if (std::isdigit(c) == 0)
+                    {
+                        res.set_content("Wrong number", "text/plain");
+                        return;
+                    }
+                }
+            }
+        }
+
+        callerNum = atoi(val.c_str());
+        unsigned queueSize = m_config.getQueueSize();
         std::time_t callReceiveDT = time(0);
         std::string callID = getRandomString();
-        unsigned callerNum = atoi(query.c_str());
-        std::time_t callCloseDT;
 
-        if(callerNum != 0)
-        {
-            m_callsMutex.lock();
+        m_callsMutex.lock();
             if(m_callsVec.size() == queueSize)
-                std::cout<<"Overload.\n";
+                res.set_content("Overload.", "text/plain");
             else
                 m_callsVec.push_back(Call{
                                 callerNum,
@@ -183,17 +201,11 @@ void CallCenter::run()
                                 callID});
 
             m_callsMutex.unlock();
-        }else
-        {
-            std::cout<<"Bad Request.\n";
-            //Неверно задан номер
-        }
+    });
+    m_server.listen("localhost", 8080);
 
-        std::cout<<"Enter a http request: ";
-        std::cin>>query;
-    }
-    m_isWorking = false;
-    distributor.join();
+    if(distributor.joinable())
+        distributor.join();
 }
 
 bool CallCenter::exportCDR()

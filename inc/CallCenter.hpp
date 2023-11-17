@@ -10,14 +10,12 @@
 #include <random>
 #include <algorithm>
 
+#include <httplib.h>
 #include "../lib/httpparser/httprequestparser.h"
 #include "../lib/httpparser/request.h"
 #include "../lib/json/json.hpp"
 
-//#include "Call.hpp"
-//#include "CallDetailedRecord.hpp"
 #include "Config.hpp"
-//#include "Operator.hpp"
 
 struct CDR
 {
@@ -94,4 +92,6 @@ private:
     std::vector<Operator>       m_Operators;
     std::vector<Call>           m_callsVec;
     bool                        m_isWorking;
+
+    httplib::Server             m_server;
 };
