@@ -94,6 +94,26 @@ void CallCenter::distributeRequests_background()
 
     while (m_isWorking)
     {
+        m_operatorsMutex.lock();
+        if(m_Operators.size() > m_config.getOperatorsCount())
+        {
+            for(auto opIter = m_Operators.begin();
+                    opIter != m_Operators.end();
+                    opIter++)
+            {
+                if(m_Operators.size() > m_config.getOperatorsCount())
+                    if(!(*opIter).m_isBusy)
+                        m_Operators.erase(opIter);
+            }
+        }else if(m_Operators.size() < m_config.getOperatorsCount())
+        {
+            for(unsigned i = m_Operators.size();
+                i < m_config.getOperatorsCount();
+                i++)
+                    m_Operators.push_back(Operator{i, false});
+        }
+        m_operatorsMutex.unlock();
+
         while (!m_callsVec.empty())
         {
             m_operatorsMutex.lock();
@@ -186,6 +206,38 @@ void CallCenter::start()
         m_server.stop();
     });
 
+    //Add a config change POST query to server
+    m_server.Post("/config",
+                [this]
+                (const httplib::Request& req,
+                 httplib::Response& res)
+    {
+        std::string cfgFileName;
+
+        if (req.has_param("name"))
+        {
+            cfgFileName = req.get_param_value("name");
+            
+            m_configMutex.lock();
+            if(!readConfig(cfgFileName))
+            {
+                m_configMutex.unlock();
+                res.set_content("Wrong file name\n", "text/plain");
+                return;
+            }
+            else
+            {
+                m_configMutex.unlock();
+                res.set_content("OK\n", "text/plain");
+                return;
+            }
+        }else
+        {
+            res.set_content("Wrong request\n", "text/plain");
+            return;
+        }
+    });
+
     //Add a call POST query to server
     m_server.Post("/call", [this](const httplib::Request& req, httplib::Response& res)
     {
@@ -250,7 +302,7 @@ void CallCenter::start()
         unsigned queueSize = m_config.getQueueSize();
 
         m_callsMutex.lock();
-            if(m_callsVec.size() == queueSize)
+            if(m_callsVec.size() >= queueSize)
             {
                 //Queue overload case
                 res.set_content("Overload.\n", "text/plain");

@@ -1,0 +1,7 @@
+{
+    "ProcessingTime": 3000,
+    "OperatorsCount": 2,
+    "QueueSize": 10,
+    "Rmin": 1000,
+    "Rmax": 5000
+}

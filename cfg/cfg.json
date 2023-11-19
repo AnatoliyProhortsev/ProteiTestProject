@@ -1,5 +1,4 @@
 {
-    "CallDuplicationMode": false,
     "ProcessingTime": 5000,
     "OperatorsCount": 3,
     "QueueSize": 10,
