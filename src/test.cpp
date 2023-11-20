@@ -6,6 +6,6 @@ int main(int argc, char* argv[])
 {
     CallCenter center("../cfg/cfg.json");
     center.start();
-    std::cout<<center.exportCDR()<<'\n';
+    center.exportCDR();
     return 0;
 }

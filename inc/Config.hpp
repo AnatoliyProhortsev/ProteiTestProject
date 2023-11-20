@@ -2,6 +2,7 @@
 #include <string>
 
 #include "../lib/json/json.hpp"
+#include <spdlog/spdlog.h>
 
 using json = nlohmann::json;
 

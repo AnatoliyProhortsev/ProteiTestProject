@@ -10,7 +10,11 @@ Config::Config(const std::string &fileName)
 {
     m_currentCfgFileName = "";
     if(!readConfigFile(fileName))
+    {
+        spdlog::debug("Can't read cfg file. Default cfg params will proceed.");
         performDefaultCfg();
+    }
+    spdlog::debug("New cfg file applied.");
 }
 
 void Config::performDefaultCfg()
@@ -63,6 +67,7 @@ bool Config::readConfigFile(const std::string &fileName)
                 m_Rmin < 500 ||
                 m_Rmax < m_Rmin)
             {
+                spdlog::debug("One or more invalid cfg params.");
                 if(m_currentCfgFileName != "")
                     return readConfigFile(m_currentCfgFileName);
 
