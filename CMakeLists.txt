@@ -38,13 +38,14 @@ target_link_libraries(CallCenter httplib spdlog)
 
 # Download and install GoogleTest
 include(ExternalProject)
-ExternalProject_Add(gtest
+ExternalProject_Add(
+  GTest
   URL https://github.com/google/googletest/archive/release-1.8.0.zip
   PREFIX ${CMAKE_CURRENT_BINARY_DIR}/gtest
   BUILD_COMMAND sudo make all
   INSTALL_COMMAND sudo make install
 )
-ExternalProject_Get_Property(gtest source_dir binary_dir)
+ExternalProject_Get_Property(GTest source_dir binary_dir)
 
 find_package(GTest REQUIRED)
 #Add the test executable
@@ -52,7 +53,7 @@ add_executable(CallCenterTest ${TEST_SOURCES})
 #Add compiler options for the test executable
 target_compile_options(CallCenterTest PUBLIC -pthread -lgtest)
 #Add the libraries to the test executable
-add_dependencies(CallCenterTest gtest)
+add_dependencies(CallCenterTest GTest)
 target_link_libraries(CallCenterTest httplib spdlog GTest::GTest)
 
 ##################################
