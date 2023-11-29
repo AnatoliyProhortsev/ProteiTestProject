@@ -7,6 +7,10 @@ project(CallCenter)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+make_directory(../cdr)
+make_directory(../log)
+make_directory(../stats)
+
 # include directories
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/lib)
