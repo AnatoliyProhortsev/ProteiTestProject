@@ -11,10 +11,14 @@ Config::Config(const std::string &fileName)
     m_currentCfgFileName = "";
     if(!readConfigFile(fileName))
     {
+        #ifndef test
         spdlog::debug("Can't read cfg file. Default cfg params will proceed.");
+        #endif
         performDefaultCfg();
     }
+    #ifndef test
     spdlog::debug("New cfg file applied.");
+    #endif
 }
 
 void Config::performDefaultCfg()
@@ -67,7 +71,9 @@ bool Config::readConfigFile(const std::string &fileName)
                 m_Rmin < 500 ||
                 m_Rmax < m_Rmin)
             {
+                #ifndef test
                 spdlog::debug("One or more invalid cfg params.");
+                #endif
                 if(m_currentCfgFileName != "")
                     return readConfigFile(m_currentCfgFileName);
 
@@ -80,8 +86,9 @@ bool Config::readConfigFile(const std::string &fileName)
     }
 }
 
-unsigned Config::getOperatorsCount(){return m_operatorsCount;};
-unsigned Config::getProcessingTime(){return m_processingTime;};
-unsigned Config::getQueueSize(){return m_queueSize;};
-unsigned Config::getRmax(){return m_Rmax;};
-unsigned Config::getRmin(){return m_Rmin;};
+unsigned Config::getOperatorsCount(){return m_operatorsCount;}
+unsigned Config::getProcessingTime(){return m_processingTime;}
+unsigned Config::getQueueSize(){return m_queueSize;}
+unsigned Config::getRmax(){return m_Rmax;}
+unsigned Config::getRmin(){return m_Rmin;}
+std::string Config::getCfgFileName() {return m_currentCfgFileName;}

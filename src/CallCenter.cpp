@@ -6,6 +6,12 @@ CallCenter::CallCenter(const std::string &cfgName)
     for(unsigned i = 0; i < m_config.getOperatorsCount(); i++)
         m_Operators.push_back(Operator{i, false});
 
+    std::time_t journalDate = time(0);
+    #ifndef test
+    m_FileLogger = spdlog::basic_logger_mt("fileLog", "../log/" + dateToFileNameString(journalDate));
+    spdlog::get("fileLog")->info("CallCenter was inited with cfg: " + cfgName + ".");
+    #endif
+
     srand(time(0));
 }
 
@@ -15,12 +21,21 @@ CallCenter::CallCenter()
     for(unsigned i = 0; i < m_config.getOperatorsCount(); i++)
         m_Operators.push_back(Operator{i, false});
 
+    std::time_t journalDate = time(0);
+
+    #ifndef test
+    m_FileLogger = spdlog::basic_logger_mt("fileLog", "../log/" + dateToFileNameString(journalDate));
+    spdlog::get("fileLog")->info("CallCenter inited with default cfg.");
+    #endif
+
     srand(time(0));
 }
 
 CallCenter::~CallCenter()
 {
+    #ifndef test
     spdlog::info("Clearing all vectors.");
+    #endif
     m_CDRvec.clear();
     m_callsVec.clear();
     m_Operators.clear();
@@ -31,10 +46,16 @@ bool CallCenter::readConfig(const std::string &fileName)
 {
     if(m_config.readConfigFile(fileName))
     {
+        #ifndef test
         spdlog::info("Config file succesfully readed.");
+        spdlog::get("fileLog")->info("Config file succesfully readed.");
+        #endif
         return true;
     }
+    #ifndef test
     spdlog::error("Can't read config file.");
+    spdlog::get("fileLog")->error("Can't read config file.");
+    #endif
     return false;
 }
 
@@ -52,7 +73,11 @@ void CallCenter::proceedCall_background(Call call, unsigned opID)
     ));
 
     //Simulation of call
+    #ifndef test
     spdlog::info("Operator " + std::to_string(opID) + " started call " + call.m_callID);
+    spdlog::get("fileLog")->info("Operator " + std::to_string(opID) + " started call " + call.m_callID);
+    #endif
+    
     std::time_t answerTime = time(0);
     std::chrono::milliseconds timespan(procTime);
     std::this_thread::sleep_for(timespan);
@@ -80,8 +105,11 @@ void CallCenter::proceedCall_background(Call call, unsigned opID)
     {
         if((*acIter).m_Number == call.m_Number)
         {
+            #ifndef test
             m_activeCallsVec.erase(acIter);
             spdlog::debug("Call released.");
+            spdlog::get("fileLog")->debug("Call released.");
+            #endif
         }
 
         break;
@@ -92,12 +120,18 @@ void CallCenter::proceedCall_background(Call call, unsigned opID)
     m_operatorsMutex.lock();
     m_Operators.at(opID).m_isBusy = false;
     m_operatorsMutex.unlock();
+    #ifndef test
     spdlog::info("Operator " + std::to_string(opID) + " now free.");
+    spdlog::get("fileLog")->info("Operator " + std::to_string(opID) + " now free.");
+    #endif
 }
 
 void CallCenter::distributeRequests_background()
 {
+    #ifndef test
     spdlog::info("Distributor started.");
+    spdlog::get("fileLog")->info("Distributor started.");
+    #endif
     unsigned rMax = m_config.getRmax();
     unsigned rMin = m_config.getRmin();
 
@@ -113,7 +147,10 @@ void CallCenter::distributeRequests_background()
                 if(m_Operators.size() > m_config.getOperatorsCount())
                     if(!(*opIter).m_isBusy)
                     {
+                        #ifndef test
                         spdlog::debug("Deleting operator with ID: " + std::to_string((*opIter).m_ID));
+                        spdlog::get("fileLog")->debug("Deleting operator with ID: " + std::to_string((*opIter).m_ID));
+                        #endif
                         m_Operators.erase(opIter);
                     }
             }
@@ -123,7 +160,10 @@ void CallCenter::distributeRequests_background()
                 i < m_config.getOperatorsCount();
                 i++)
                 {
+                    #ifndef test
                     spdlog::debug("Adding operator with ID: " + std::to_string(i));
+                    spdlog::get("fileLog")->debug("Adding operator with ID: " + std::to_string(i));
+                    #endif
                     m_Operators.push_back(Operator{i, false});
                 }
                     
@@ -150,7 +190,10 @@ void CallCenter::distributeRequests_background()
                         callToProceed,
                         (*opIter).m_ID
                     );
+                    #ifndef test
                     spdlog::debug("Call "+ callToProceed.m_callID + " pushed to queue.");
+                    spdlog::get("fileLog")->debug("Call "+ callToProceed.m_callID + " pushed to queue.");
+                    #endif
 
                     m_activeCallsMutex.lock();
                     m_activeCallsVec.push_back(callToProceed);
@@ -161,7 +204,10 @@ void CallCenter::distributeRequests_background()
                     //Delete call from queue
                     m_callsVec.erase(m_callsVec.begin());
                     m_callsMutex.unlock();
+                    #ifndef test
                     spdlog::debug("Call deleted from queue.");
+                    spdlog::get("fileLog")->debug("Call deleted from queue.");
+                    #endif
                     break;
                 }
             }
@@ -186,7 +232,10 @@ void CallCenter::distributeRequests_background()
                             false);
                         //Delete call from queue
                         callsIter = m_callsVec.erase(callsIter);
+                        #ifndef test
                         spdlog::info("Call " + (*callsIter).m_callID + " dropped due to timeout.");
+                        spdlog::get("fileLog")->info("Call " + (*callsIter).m_callID + " dropped due to timeout.");
+                        #endif
                     }else
                     {
                         //increase query awating time based on distributor "clock"
@@ -201,12 +250,18 @@ void CallCenter::distributeRequests_background()
     }
 
     //Await for all active calls before shutting down
+    #ifndef test
     spdlog::info("Distributor awaiting unproceeded calls..");
+    spdlog::get("fileLog")->info("Distributor awaiting unproceeded calls..");
+    #endif
     while(!m_activeCallsVec.empty())
         std::this_thread::sleep_for(
             std::chrono::milliseconds(
                 500));
+    #ifndef test
     spdlog::info("Distributor quitting.");
+    spdlog::get("fileLog")->info("Distributor quitting.");
+    #endif
 }
 
 void CallCenter::start()
@@ -216,6 +271,8 @@ void CallCenter::start()
     m_isWorking = true;
     //Creating distributor thread(it will automatically run)
     std::thread distributor(&CallCenter::distributeRequests_background, this);
+    //Creating background statistics collector 
+    std::thread statCollector(&CallCenter::statCollector_background, this);
 
     //Add a shutdown POST query to server
     m_server.Post("/shutdown",
@@ -223,7 +280,10 @@ void CallCenter::start()
                 (const httplib::Request& req,
                  httplib::Response& res)
     {
+        #ifndef test
         spdlog::info("Received shutdown cmd.");
+        spdlog::get("fileLog")->info("Received shutdown cmd.");
+        #endif
         m_isWorking = false;
         m_server.stop();
     });
@@ -234,7 +294,10 @@ void CallCenter::start()
                 (const httplib::Request& req,
                  httplib::Response& res)
     {
+        #ifndef test
         spdlog::info("Received config change cmd.");
+        spdlog::get("fileLog")->info("Received config change cmd.");
+        #endif
         std::string cfgFileName;
 
         if (req.has_param("name"))
@@ -242,24 +305,36 @@ void CallCenter::start()
             cfgFileName = req.get_param_value("name");
             
             m_configMutex.lock();
+            #ifndef test
             spdlog::debug("Trying to read new config file.");
+            spdlog::get("fileLog")->debug("Trying to read new config file.");
+            #endif
             if(!readConfig(cfgFileName))
             {
+                #ifndef test
                 spdlog::info("Invalid request: wrong file name");
+                spdlog::get("fileLog")->info("Invalid request: wrong file name");
+                #endif
                 m_configMutex.unlock();
                 res.set_content("Wrong file name\n", "text/plain");
                 return;
             }
             else
             {
+                #ifndef test
                 spdlog::info("Config changed.");
+                spdlog::get("fileLog")->info("Config changed.");
+                #endif
                 m_configMutex.unlock();
                 res.set_content("OK\n", "text/plain");
                 return;
             }
         }else
         {
+            #ifndef test
             spdlog::info("Wrong request.");
+            spdlog::get("fileLog")->info("Wrong request.");
+            #endif
             res.set_content("Wrong request\n", "text/plain");
             return;
         }
@@ -274,27 +349,39 @@ void CallCenter::start()
         if (req.has_param("number"))
         {
             number = req.get_param_value("number");
+            #ifndef test
             spdlog::info("Received call cmd with param: " + number);
+            spdlog::get("fileLog")->info("Received call cmd with param: " + number);
+            #endif
             if(number.length() == 11)
             {
                 for (char const& c : number) 
                 {
                     if (std::isdigit(c) == 0)
                     {
+                        #ifndef test
                         spdlog::info("Invalid request: not a number.");
+                        spdlog::get("fileLog")->info("Invalid request: not a number.");
+                        #endif
                         res.set_content("Not a number\n", "text/plain");
                         return;
                     }
                 }
             }else
             {
+                #ifndef test
                 spdlog::error("Invalid request: not a valid number.");
+                spdlog::get("fileLog")->error("Invalid request: not a valid number.");
+                #endif
                 res.set_content("Not a valid number\n", "text/plain");
                 return;
             }
         }else
         {
+            #ifndef test
             spdlog::error("Wrong request.");
+            spdlog::get("fileLog")->error("Wrong request.");
+            #endif
             res.set_content("Wrong request\n", "text/plain");
             return;
         }
@@ -307,7 +394,10 @@ void CallCenter::start()
         {
             if((*callsIter).m_Number.compare(number) == 0)
             {
+                #ifndef test
                 spdlog::info("Call duplication.");
+                spdlog::get("fileLog")->info("Call duplication.");
+                #endif
                 res.set_content("Call already in queue\n", "text/plain");
                 m_callsMutex.unlock();
                 return;
@@ -323,7 +413,10 @@ void CallCenter::start()
         {
             if((*acIter).m_Number.compare(number) == 0)
             {
+                #ifndef test
                 spdlog::info("Call duplication.");
+                spdlog::get("fileLog")->info("Call duplication.");
+                #endif
                 res.set_content("Call already proceeding\n", "text/plain");
                 m_activeCallsMutex.unlock();
                 return;
@@ -338,7 +431,10 @@ void CallCenter::start()
             if(m_callsVec.size() >= queueSize)
             {
                 //Queue overload case
+                #ifndef test
                 spdlog::info("System is overloaded to proceed request.");
+                spdlog::get("fileLog")->info("System is overloaded to proceed request.");
+                #endif
                 res.set_content("Overload.\n", "text/plain");
             }
             else
@@ -353,25 +449,45 @@ void CallCenter::start()
                                 callReceiveDT,
                                 callID});
                 res.set_content("Call ID: " + callID + '\n', "text/plain");
-                spdlog::info("Sended call ID " + callID + " to client.");     
+                #ifndef test
+                spdlog::info("Sended call ID " + callID + " to client.");
+                spdlog::get("fileLog")->info("Sended call ID " + callID + " to client.");
+                #endif
             }
         m_callsMutex.unlock();
         return;
     });
 
     //Start listening to queries
+    #ifndef test
     spdlog::info("Server started listening incoming queries.");
+    spdlog::get("fileLog")->info("Server started listening incoming queries.");
+    #endif
     m_server.listen("localhost", 8080);
 
     //Awaiting to distributor to finish
-    spdlog::info("Server awaiting to distributor shutdown");
+    #ifndef test
+    spdlog::info("Server awaiting to distributor shutdown...");
+    spdlog::get("fileLog")->info("Server awaiting to distributor shutdown...");
+    #endif
     distributor.join();
+    #ifndef test
+    spdlog::info("Server awaiting to stat collector shutdown...");
+    spdlog::get("fileLog")->info("Server awaiting to stat collector shutdown...");
+    #endif
+    statCollector.join();
+    #ifndef test
     spdlog::info("Server shutting down");
+    spdlog::get("fileLog")->info("Server shutting down");
+    #endif
 }
 
 bool CallCenter::exportCDR()
 {
+    #ifndef test
     spdlog::info("Started to exporting CDR journal.");
+    spdlog::get("fileLog")->info("Started to exporting CDR journal.");
+    #endif
     if(m_CDRvec.empty())
         return false;
 
@@ -415,14 +531,164 @@ bool CallCenter::exportCDR()
 
     if(!outputFile)
     {
+        #ifndef test
         spdlog::error("Error to export CDR journal: can't open output file");
+        spdlog::get("fileLog")->error("Error to export CDR journal: can't open output file");
+        #endif
         return false;
     }
 
     //Output CDR journal
     outputFile << std::setw(4) << cdrJson;
     outputFile.close();
+    #ifndef test
     spdlog::info("CDR journal exported.");
+    spdlog::get("fileLog")->info("CDR journal exported.");
+    #endif
+    return true;
+}
+
+bool CallCenter::statCollector_background()
+{
+    json journal = json::array();
+    json journalEntry;
+
+    unsigned minAwaiting = UINT_MAX,
+            avAwating = 0,
+            maxAwaiting = 0,
+            minSize = UINT_MAX,
+            avSize = 0,
+            maxSize = 0,
+            minBusyCount = UINT_MAX,
+            avBusyCount = 0,
+            maxBusyCount = 0;
+
+    unsigned curCdrEntry = 0;
+
+    unsigned awaitingSum = 0,
+            sizeSum = 0,
+            busyCountSum = 0;
+
+    unsigned count = 0;
+
+    std::time_t answer, receive;
+
+    while(m_isWorking)
+    {
+        journalEntry.clear();
+
+        count = m_CDRvec.size() - curCdrEntry;
+        for(unsigned count = 0; count < 10; count++)
+        {
+            for(curCdrEntry; curCdrEntry != m_CDRvec.size(); curCdrEntry++)
+            {
+                if(m_CDRvec[curCdrEntry].m_isCallProceeded)
+                {
+                    answer = m_CDRvec[curCdrEntry].m_callAnswerDT;
+                    receive = m_CDRvec[curCdrEntry].m_callReceiveDT;
+
+                    double time_diff = difftime(answer, receive);
+
+                    if(time_diff < minAwaiting)
+                        minAwaiting = time_diff;
+
+                    awaitingSum+=(unsigned)time_diff;
+
+                    if(time_diff > maxAwaiting)
+                        maxAwaiting = time_diff;
+                }
+            }
+            if(m_callsVec.size() < minSize)
+                        minSize = m_callsVec.size();
+                    
+            if(m_activeCallsVec.size() < minBusyCount)
+                minBusyCount = m_activeCallsVec.size();
+
+            sizeSum += m_callsVec.size();
+            busyCountSum += m_activeCallsVec.size();
+
+            if(m_callsVec.size() > maxSize)
+                        maxSize = m_callsVec.size();
+
+            if(m_activeCallsVec.size() > maxBusyCount)
+                maxBusyCount = m_activeCallsVec.size();
+
+            std::this_thread::sleep_for(
+            std::chrono::milliseconds(
+                1000));
+        }
+        avSize = sizeSum/10;
+
+        if(count !=0)
+            avAwating = awaitingSum/count;
+        else
+            avAwating = 0;
+
+        avBusyCount = busyCountSum/10;
+
+        if(minAwaiting == UINT_MAX)
+            minAwaiting = 0;
+
+        journalEntry["minimum awaitingTime"] = minAwaiting;
+        journalEntry["average awating time"] = avAwating;
+        journalEntry["maximum awating time"] = maxAwaiting;
+        journalEntry["minimum queue size"] = minSize;
+        journalEntry["average queue size"] = avSize;
+        journalEntry["maximum queue size"] = maxSize;
+        journalEntry["minimum busy operators"] = minBusyCount;
+        journalEntry["average busy operators"] = avBusyCount;
+        journalEntry["maximum busy operators"] = maxBusyCount;
+        journalEntry["timestamp"] = timeToString(time(0));
+        
+        journal.emplace_back(std::move(journalEntry));
+
+        #ifndef test
+        spdlog::info("Stats perfomed.");
+        spdlog::get("fileLog")->info("Stats perfomed.");
+        #endif
+
+        minAwaiting = UINT_MAX,
+        avAwating = 0;
+        maxAwaiting = 0;
+        minSize = UINT_MAX;
+        avSize = 0;
+        maxSize = 0;
+        minBusyCount = UINT_MAX;
+        avBusyCount = 0;
+        maxBusyCount = 0;
+
+        awaitingSum = 0;
+        sizeSum = 0;
+        busyCountSum = 0;
+
+        count = 0;
+
+        std::this_thread::sleep_for(
+            std::chrono::milliseconds(
+                10000));
+    }
+
+    std::time_t journalDate = time(0);
+    std::ofstream outputFile(
+        "../stats/" + dateToFileNameString(journalDate),
+        std::ofstream::out);
+
+    if(!outputFile)
+    {
+        #ifndef test
+        spdlog::error("Error to export stats journal: can't open output file");
+        spdlog::get("fileLog")->error("Error to export stats journal: can't open output file");
+        #endif
+        return false;
+    }
+
+    //Output stats journal
+    outputFile << std::setw(4) << journal;
+    outputFile.close();
+    #ifndef test
+    spdlog::info("Stats journal exported.");
+    spdlog::get("fileLog")->info("Stats journal exported.");
+    #endif
     return true;
 }
 

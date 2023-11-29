@@ -3,6 +3,8 @@
 
 #include "../lib/json/json.hpp"
 #include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <gtest/gtest.h>
 
 using json = nlohmann::json;
 
@@ -18,6 +20,7 @@ public:
     unsigned    getRmax();
     unsigned    getProcessingTime();
     void        performDefaultCfg();
+    std::string getCfgFileName();
 private:
     std::string m_currentCfgFileName;
     unsigned    m_operatorsCount;

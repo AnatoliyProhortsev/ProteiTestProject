@@ -58,6 +58,14 @@ public:
 
     void        start();
 
+    FRIEND_TEST(test_call, just_call);
+    FRIEND_TEST(test_call, call_duplication);
+    FRIEND_TEST(test_call, wrong_cmd);
+    FRIEND_TEST(test_call, wrong_number);
+    FRIEND_TEST(config, wrong_init_cfg);
+    FRIEND_TEST(config, valid_init_cfg);
+    FRIEND_TEST(config, valid_cfg_in_run);
+
 private:
 
     std::string dateToString(const time_t &src);
@@ -72,6 +80,8 @@ private:
                                         unsigned opID);
 
     void        distributeRequests_background();
+
+    bool        statCollector_background();
 
     void        addCDREntry(
                     const std::time_t &receiveTime,
@@ -100,6 +110,11 @@ private:
     std::vector<Call>           m_activeCallsVec;
 
     httplib::Server             m_server;
+
+    #ifndef test
+    std::shared_ptr
+        <spdlog::logger>        m_FileLogger;
+    #endif
 
     bool                        m_isWorking;
 };
